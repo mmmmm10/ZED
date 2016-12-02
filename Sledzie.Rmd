@@ -9,14 +9,239 @@ output:
     toc: yes
     toc_float: yes
 ---
-```{r echo=FALSE, error=FALSE, warning=FALSE, message=FALSE}
+
+# Wstêp
+
+```{r echo=TRUE, error=FALSE, warning=FALSE, message=FALSE}
 library(knitr)
-opts_chunk$set(echo=FALSE, error=FALSE, warning=FALSE, message=FALSE)
 library(dplyr)
 library(ggplot2)
+library(corrplot)
+library(plotly)
+library(caret)
 ```
-# Wstêp
-```{r}
+```{r echo=FALSE}
+opts_chunk$set(echo=FALSE, error=FALSE, warning=FALSE, message=FALSE)
+```
+
+```{r inter, echo=FALSE, cache=TRUE}
 tab <- read.csv('sledzie.csv', na.strings='?')
-kable(tab%>%summary())
+
+for(j in c('cfin1','cfin2','chel1','chel2','lcop1','lcop2','sst')){
+  tabna<-tab%>%filter(is.na(tab[j]))
+  tabna2<-0
+  while(count(tabna)!=tabna2){
+  tabna2<-count(tabna)
+  for(i in seq(dim(tabna)[1]-1)){
+    m1<-tab[tabna[i,'X']+2,]
+    m2<-tab[tabna[i,'X'],]
+    m3<-tabna[i,]
+    if(m1$xmonth == m3$xmonth){
+      if(!is.na(m1[j])){
+        tab[tabna[i,'X']+1,j] <- m1[j]
+        }else{
+          if(m2$xmonth == m3$xmonth){
+            if(!is.na(m2[j])){
+              tab[tabna[i,'X']+1,j] <- m2[j]
+            }
+          }
+        }
+      }else{
+      if(m2$xmonth == m3$xmonth){
+        if(!is.na(m2[j])){
+          tab[tabna[i,'X']+1,j] <- m2[j]
+        }
+      }
+    }
+  }
+  }
+}
+for(j in c('cfin1','cfin2','chel1','chel2','lcop1','lcop2','sst')){
+  tabna<-tab%>%filter(is.na(tab[j]))
+  for(i in seq(dim(tabna)[1])){
+    tab2<-tab%>%filter(!is.na(tab[j]))
+    tab[tabna[i,'X']+1,j]<-as.numeric(tab2%>%group_by(xmonth)%>%summarize(a=mean(tab2[,j]))%>%filter(xmonth==tab[tabna[i,'X']+1,'xmonth'])%>%select(a))
+  }
+}
+
+cmf<-c()
+for(i in seq(dim(tab)[1])){
+  if(!(tab[i,'cumf']%in%cmf)){
+    cmf<-c(cmf,tab[i,'cumf'])
+  }
+}
+
+tab2<-tab%>%group_by(cumf,xmonth)%>%summarise(dlugosc=mean(length))%>%mutate(category = factor(cumf, levels = cmf))%>%arrange(category,xmonth)%>%mutate(lp="Œrednia d³ugoœæ")%>%mutate(rok_miesiac = match(category,cmf)+xmonth/12)
+
+p<-ggplot(tab2, aes(x=rok_miesiac, y=dlugosc))+geom_point()+geom_smooth()+ggtitle("Œrednia miesiêczna d³ugoœæ ³owionych œledzi")+ylab("D³ugoœæ œledzi")+xlab("Rok/miesi¹c")
+ggplotly(p)
 ```
+
+Na przestrzeni ostatnich lat œrednia d³ugoœæ œledzi uleg³a zmniejszeniu. Analizy przedstawione w tym dokumencie pozwalaj¹ stwierdziæ, ¿e przyczyn¹ takiego stanu rzeczy jest najprawdopodobniej wzrost œredniej temperatury wód na Morzu Celtyckim, choæ nie bez znaczenia pozostaje iloœæ planktonu typu Calanus helgolandicus gat. 1 oraz Wid³onogów gat. 1. Niestety zale¿noœci te nie s¹ wystarczaj¹co silne by stworzyæ nieomylny model predykcji d³ugoœci œledzia.
+
+W analizach w tym raporcie oœ x opisana jest za pomoc¹ roku (liczba ca³kowita) oraz miesi¹ca (czêœæ po przecinku) od rozpoczêcia badania.
+
+# Opis zbioru
+
+Zbiór zawiera dane dotycz¹ce po³owu œledzi oceanicznych w Europie na przestrzeni 53 lat. Do opisu próbek z po³owów pos³u¿y³y atrybuty takie jak wielkoœæ œledzi, dostêpnoœæ pokarmu (planktonu), temperatura i zasolenie wody, miesi¹c po³owu, czy wreszcie oscylacja pó³nocnoatlantycka bêd¹ca wskaŸnikiem warunków pogodowych. Uwzglêdniono równie¿ zmiany iloœciowe populacji opisuj¹c iloœæ od³owionych sztuk i wypuszczonego narybku.
+
+```{r wczytanie_danych, echo=TRUE, eval=FALSE}
+tab <- read.csv('sledzie.csv', na.strings='?')
+```
+```{r}
+kable(tab%>%select(length:lcop2)%>%summary())
+kable(tab%>%select(fbar:sal,nao)%>%summary())
+```
+
+Przetworzone dane:
+
+```{r przetworzenie, echo=TRUE, eval=FALSE}
+for(j in c('cfin1','cfin2','chel1','chel2','lcop1','lcop2','sst')){
+  tabna<-tab%>%filter(is.na(tab[j]))
+  tabna2<-0
+  while(count(tabna)!=tabna2){
+  tabna2<-count(tabna)
+  for(i in seq(dim(tabna)[1]-1)){
+    m1<-tab[tabna[i,'X']+2,]
+    m2<-tab[tabna[i,'X'],]
+    m3<-tabna[i,]
+    if(m1$xmonth == m3$xmonth){
+      if(!is.na(m1[j])){
+        tab[tabna[i,'X']+1,j] <- m1[j]
+        }else{
+          if(m2$xmonth == m3$xmonth){
+            if(!is.na(m2[j])){
+              tab[tabna[i,'X']+1,j] <- m2[j]
+            }
+          }
+        }
+      }else{
+      if(m2$xmonth == m3$xmonth){
+        if(!is.na(m2[j])){
+          tab[tabna[i,'X']+1,j] <- m2[j]
+        }
+      }
+    }
+  }
+  }
+}
+for(j in c('cfin1','cfin2','chel1','chel2','lcop1','lcop2','sst')){
+  tabna<-tab%>%filter(is.na(tab[j]))
+  for(i in seq(dim(tabna)[1])){
+    tab2<-tab%>%filter(!is.na(tab[j]))
+    tab[tabna[i,'X']+1,j]<-as.numeric(tab2%>%group_by(xmonth)%>%summarize(a=mean(tab2[,j]))%>%filter(xmonth==tab[tabna[i,'X']+1,'xmonth'])%>%select(a))
+  }
+}
+```
+
+```{r}
+kable(tab%>%select(length:lcop2)%>%summary())
+kable(tab%>%select(fbar:sal,nao)%>%summary())
+```
+
+Wartoœci NA wystêpuj¹ce w zbiorze mo¿na by³o w wiêkszoœci z powodzeniem uzupe³niæ na podstawie próbek pobranych w tym samym okresie. Dla pozostaj¹cych nielicznych braków wyliczono œredni¹ wartoœæ danego parametru w zbiorze przy uwzglednieniu miesi¹ca pomiaru.
+
+# Analiza wartoœci atrybutów
+
+Analiza zebranych danych pozwala na postawienie nastêpuj¹cych wniosków:
+
+```{r analiza_szczegolowa}
+cmf<-c()
+for(i in seq(dim(tab)[1])){
+  if(!(tab[i,'cumf']%in%cmf)){
+    cmf<-c(cmf,tab[i,'cumf'])
+  }
+}
+
+tab2<-tab%>%group_by(cumf,xmonth)%>%summarise(dlugosc=mean(length))%>%mutate(category = factor(cumf, levels = cmf))%>%arrange(category,xmonth)%>%mutate(lp="Œrednia d³ugoœæ")%>%mutate(rok_miesiac = match(category,cmf)+xmonth/12)
+ggplot(tab2, aes(x=rok_miesiac, y=dlugosc))+geom_point()+geom_smooth()+ggtitle("Œrednia miesiêczna d³ugoœæ ³owionych œledzi")+ylab("D³ugoœæ œledzi")+xlab("Rok/miesi¹c")
+```
+
+Na przestrzeni lat obejmuj¹cych badanie œrednia d³ugoœæ œledzi oscylowa³a w przedziale  23,46 cm – 26,71 cm.
+
+```{r}
+tab3<-tab%>%group_by(cumf,xmonth)%>%summarise(dlugosc=mean(sst))%>%mutate(category = factor(cumf, levels = cmf))%>%arrange(category,xmonth)%>%mutate(lp="Œrednia miesiêczna temperatura")%>%mutate(rok_miesiac = match(category,cmf)+xmonth/12)
+ggplot(data=tab3, mapping=aes(x=rok_miesiac, y=dlugosc))+geom_point()+geom_smooth()+geom_smooth(data=tab2, mapping=aes(x=rok_miesiac, y=dlugosc))+facet_grid(lp~., scales = "free_y")+ggtitle("Œrednia miesiêczna d³ugoœæ ³owionych œledzi", subtitle = "W odniesieniu do œredniej temperartury wody")+ylab("")+xlab("Rok/miesi¹c")
+```
+
+W trakcie badania wp³ywu poszczególnych czynników mo¿na zauwa¿yæ, ze najwy¿szy wspó³czynnik korelacji wystêpuje pomiêdzy œredni¹ d³ugoœci¹ œledzi a temperatur¹ powierzchni oceanu. Badane osobniki by³y najd³u¿sze przy temperaturach powierzchniowych na poziomie ok, 13,5 stopnia C.
+
+```{r}
+cols <- c("cfin1"="black","cfin2"="white","chel1"="red", "chel2"="green", "lcop1"="blue", "lcop2"="orange")
+
+tab3<-tab%>%group_by(cumf,xmonth)%>%summarise(mn=mean(cfin1), mn2=mean(cfin2), mn3=mean(chel1), mn4=mean(chel2), mn5=mean(lcop1), mn6=mean(lcop2))%>%mutate(category = factor(cumf, levels = cmf))%>%arrange(category,xmonth)%>%mutate(lp="Dostêpny plankton")%>%mutate(rok_miesiac = match(category,cmf)+xmonth/12)
+
+ggplot()+geom_point(data=tab3, mapping=aes(x=rok_miesiac, y=mn, color="cfin1"))+geom_point(data=tab3, mapping=aes(x=rok_miesiac, y=mn2, color="cfin2" ))+geom_point(data=tab3, mapping=aes(x=rok_miesiac, y=mn3, color="chel1"))+geom_point(data=tab3, mapping=aes(x=rok_miesiac, y=mn4, color="chel2"))+geom_point(data=tab3, mapping=aes(x=rok_miesiac, y=mn5, color="lcop1"))+geom_point(data=tab3, mapping=aes(x=rok_miesiac, y=mn6, color="lcop2"))+geom_smooth(data=tab2, mapping=aes(x=rok_miesiac, y=dlugosc))+facet_grid(lp~., scales = "free_y")+scale_colour_manual(name="Rodzaje planktonu",values=cols)+ggtitle("Œrednia miesiêczna d³ugoœæ ³owionych œledzi", subtitle = "W odniesieniu do iloœci dostêpnego pokarmu")+ylab("")+xlab("Rok/miesi¹c")
+```
+
+Drugim czynnikiem skorelowanym z d³ugoœci¹ badanych osobników jest iloœæ planktonu (chel1 i lcop1). Analizuj¹c powy¿sz¹ zale¿noœæ zauwa¿yæ mo¿na, ¿e w okresach, w których u badanych osobników notujemy najwy¿sz¹ d³ugoœæ, wystêpuje procentowo najwy¿szy wzrost tego typu planktonu.
+
+```{r}
+tab3<-tab%>%group_by(cumf,xmonth)%>%summarise(dlugosc=mean(sal))%>%mutate(category = factor(cumf, levels = cmf))%>%arrange(category,xmonth)%>%mutate(lp="Œrednie miesiêczne zasolenie")%>%mutate(rok_miesiac = match(category,cmf)+xmonth/12)
+ggplot(data=tab3, mapping=aes(x=rok_miesiac, y=dlugosc))+geom_point()+geom_smooth()+geom_smooth(data=tab2, mapping=aes(x=rok_miesiac, y=dlugosc))+facet_grid(lp~., scales = "free_y")+ggtitle("Œrednia miesiêczna d³ugoœæ ³owionych œledzi", subtitle = "W odniesieniu do poziomu zasolenia wody")+ylab("")+xlab("Rok/miesi¹c")
+```
+
+Trzecim badanym czynnikiem jest zasolenie akwenu. Mimo pewnej zale¿noœci i wyraŸnego zmniejszenia zasolenia w okresach, w których osobniki osi¹ga³y najwiêksze rozmiary, po wstêpnej analizie odrzucono wp³yw tego parametru, gdy¿ wzrost zasolenia jest wielkoœcia fizyczn¹ zale¿n¹ od temperatury.
+
+```{r}
+tab3<-tab%>%group_by(cumf,xmonth)%>%summarise(dlugosc=mean(totaln))%>%mutate(category = factor(cumf, levels = cmf))%>%arrange(category,xmonth)%>%mutate(lp="Iloœæ z³owionych œledzi")%>%mutate(rok_miesiac = match(category,cmf)+xmonth/12)
+ggplot(data=tab3, mapping=aes(x=rok_miesiac, y=dlugosc))+geom_point()+geom_smooth()+geom_smooth(data=tab2, mapping=aes(x=rok_miesiac, y=dlugosc))+facet_grid(lp~., scales = "free_y")+ggtitle("Œrednia miesiêczna d³ugoœæ ³owionych œledzi", subtitle = "W odniesieniu do ca³kowitego miesiêcznego od³owienia")+ylab("")+xlab("Rok/miesi¹c")
+```
+
+Na koniec przeanalizowano wp³yw wielkoœci po³owów na d³ugoœæ badanych osobników. W  przypadku badania tego czynnika nie zauwa¿ono wp³ywu iloœci od³awianych osobników na œredni¹ d³ugoœæ œledzia. 
+
+W œwietle przeanalizowanego materia³u mo¿na stwierdziæ, ¿e najwiêkszy wp³yw na d³ugoœæ badanych œledzi w analizowanym okresie ma temperatura powierzchniowa. Ocieplenie powierzchni morza o oko³o 1 stopnieñ Celsjusza spowodowa³o, ¿e w badanym okresie œrednia d³ugoœæ œledzi zmniejszy³a siê o 3,25 cm. 
+
+#Korelacje pomiêdzy danymi
+
+```{r korelacje}
+my_data <- tab%>%select(length:sal,nao)
+res <- cor(my_data)
+corrplot(res, type = "lower", order = "hclust", tl.col = "black")
+```
+
+Zgodnie z wczeœniejszymi przewidywaniami najwy¿sza korelacja wystêpuje pomiêdzy d³ugoœci¹ œledzia a temperatur¹ wody. Nastêpnie wyró¿nia siê równie¿ dostêpny plankton typu chel1 i lcop1.
+
+#Regresor
+
+```{r regresja, cache=TRUE, message=FALSE, include=FALSE}
+set.seed(888)
+reg <- tab%>%select(length,chel1,sst)
+trainIndex <- createDataPartition(tab$length, p = .7,
+                                  list = FALSE,
+                                  times = 1)
+tabTrain1 <- reg[ trainIndex,]
+tabTest1  <- reg[-trainIndex,]
+tabTrain2 <- my_data[ trainIndex,]
+tabTest2  <- my_data[-trainIndex,]
+fitControl <- trainControl(method = "repeatedcv",
+                           number = 2,
+                           repeats = 5)
+fit1 <-train(length~., data = tabTrain1,
+                 method = "rf",
+                 trControl = fitControl,
+                 ntree = 1)
+fit2 <-train(length~., data = tabTrain2,
+                 method = "rf",
+                 trControl = fitControl,
+                 ntree = 10)
+```
+```{r}
+print(fit1)
+pred1<-predict(fit1, newdata = tabTest1)
+pred1<-data.frame(pred1)
+pred2<-predict(fit2, newdata = tabTest2)
+pred2<-data.frame(pred2)
+
+c<-c("Przewidywana"="red","Rzeczywista"="blue")
+tabTest1<-data.frame(tabTest1[2000:3000,])
+pred1<-data.frame(pred1[2000:3000,])
+ggplot()+scale_shape_identity()+scale_colour_manual(name=NULL, values=c)+geom_point(data=pred1, mapping=aes(1:1001,tabTest1$length,shape=1,color="Rzeczywista"))+geom_point(data=tabTest1, mapping=aes(1:1001,pred1$pred1,shape=3,color="Przewidywana"))+ylab("D³ugoœæ œledzia")+xlab("Nr przyk³adu")
+
+print(fit2)
+tabTest2<-data.frame(tabTest2[2000:3000,])
+pred2<-data.frame(pred2[2000:3000,])
+ggplot()+scale_shape_identity()+scale_colour_manual(name=NULL, values=c)+geom_point(data=pred2, mapping=aes(1:1001,tabTest2$length,shape=1,color="Rzeczywista"))+geom_point(data=tabTest2, mapping=aes(1:1001,pred2$pred2,shape=3,color="Przewidywana"))+ylab("D³ugoœæ œledzia")+xlab("Nr przyk³adu")
+```
+
+Po przeanalizowaniu zachowania regresorów mo¿na zauwa¿yæ, ¿e jakoœæ ich dzia³ania jest zbli¿ona, a co za tym idzie wy³onione predyktory czyli chel1 (lub zamiennie lcop1) i sst nios¹ ze sob¹ najwiêksz¹ dawkê informacji dotycz¹cych d³ugoœci œledzi. Mo¿na zaryzykowaæ stwierdzenie, ¿e œledzie rosn¹ d³u¿sze w zimnej wodzie i ¿e wiêkszym przysmakiem dla nich jest plankton z gatunków: Calanus helgolandicus gat. 1 i Wid³onogów gat. 1.
